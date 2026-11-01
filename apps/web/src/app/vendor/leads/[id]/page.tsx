@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { api, rupees, statusLabel } from '@/lib/api';
 import { useSession } from '@/lib/useSession';
 import Chat from '@/components/Chat';
+import { Gallery, PhotoPicker } from '@/components/Photos';
 
 type Item = { label: string; amountRupees: string };
 
@@ -14,6 +15,7 @@ function VendorLead() {
   const [d, setD] = useState<any>(null);
   const [f, setF] = useState({ amount: '', description: '', completionDays: '', warranty: '', validUntil: '' });
   const [items, setItems] = useState<Item[]>([]);
+  const [photos, setPhotos] = useState<any[]>([]);
   const [msg, setMsg] = useState<{ ok?: string; err?: string }>({});
   const [editing, setEditing] = useState(false);
 
@@ -23,6 +25,7 @@ function VendorLead() {
       setF({ amount: String(r.myQuote.amount_paise / 100), description: r.myQuote.description, completionDays: r.myQuote.completion_days ?? '',
         warranty: r.myQuote.warranty ?? '', validUntil: r.myQuote.valid_until?.slice(0, 10) ?? '' });
       setItems(r.myQuote.items.map((i: any) => ({ label: i.label, amountRupees: String(i.amount_paise / 100) })));
+      setPhotos(r.myQuote.photos ?? []);
     }
   }).catch((e) => setMsg({ err: e.message })), [id]);
   useEffect(() => { load(); }, [load]);
@@ -32,6 +35,7 @@ function VendorLead() {
     amountRupees: Number(f.amount), description: f.description,
     items: items.filter((i) => i.label).map((i) => ({ label: i.label, amountRupees: Number(i.amountRupees) || 0 })),
     completionDays: f.completionDays ? Number(f.completionDays) : undefined, warranty: f.warranty || undefined, validUntil: f.validUntil || undefined,
+    photoIds: photos.map((p) => p.id),
   });
 
   async function submit(e: React.FormEvent) {
@@ -63,6 +67,7 @@ function VendorLead() {
           <div className="row between"><h1 style={{ margin: 0 }}>{lead.title}</h1><span className="pill">{statusLabel(lead.status)}</span></div>
           <p className="small muted">#{lead.id} · {lead.category} · {lead.locality ? `${lead.locality}, ` : ''}{lead.city} · {lead.distance_km} km from you</p>
           <p>{lead.description}</p>
+          <Gallery photos={lead.photos} />
           {Object.keys(lead.details ?? {}).length > 0 && <table className="table"><tbody>{Object.entries(lead.details).map(([k, v]) => <tr key={k}><td>{k}</td><td>{String(v)}</td></tr>)}</tbody></table>}
           <p className="small">{[lead.budget_paise && `Budget ${rupees(lead.budget_paise)}`, lead.needed_by && `Needed by ${lead.needed_by.slice(0, 10)}`].filter(Boolean).join(' · ')}</p>
           {customerContact
@@ -73,6 +78,7 @@ function VendorLead() {
           <div className="card stack">
             <div className="row between"><h3>Your quotation · {statusLabel(myQuote.status)}</h3><div className="stat">{rupees(myQuote.amount_paise)}</div></div>
             <p>{myQuote.description}</p>
+            <Gallery photos={myQuote.photos} />
             <p className="small muted">Fee paid: {rupees(myQuote.fee_paise)}</p>
             {canQuote && myQuote.status === 'submitted' && <button className="btn ghost sm" onClick={() => setEditing(true)}>Revise quotation (free)</button>}
           </div>
@@ -97,6 +103,7 @@ function VendorLead() {
               <div style={{ flex: 1 }}><label>Valid until</label><input type="date" value={f.validUntil} onChange={set('validUntil')} /></div>
             </div>
             <div><label>Warranty</label><input value={f.warranty} onChange={set('warranty')} /></div>
+            <PhotoPicker kind="quotation" value={photos} onChange={setPhotos} label="Photos of your work or product (optional)" />
             {!myQuote && <p className="notice">Quotation fee for this category: <b>{rupees(d.quoteFeePaise)}</b>, charged once when you submit. Revisions are free.</p>}
             <div className="row">
               <button className="btn">{myQuote ? 'Save revision' : `Pay ${rupees(d.quoteFeePaise)} and send`}</button>

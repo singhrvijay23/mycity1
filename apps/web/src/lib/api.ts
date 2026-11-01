@@ -43,3 +43,18 @@ export const rupees = (paise?: number | null) =>
   paise == null ? '-' : '₹' + (paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 
 export const statusLabel = (s: string) => s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+
+export type Photo = { id: string; url: string; width: number; height: number };
+
+/** Upload one or more image files. The server resizes them and strips location metadata. */
+export async function uploadPhotos(kind: 'lead' | 'quotation' | 'vendor', files: File[]): Promise<Photo[]> {
+  const s = getSession();
+  const form = new FormData();
+  for (const f of files) form.append('file', f, f.name);
+  const res = await fetch(`${API}/uploads?kind=${kind}`, {
+    method: 'POST', body: form, headers: s ? { authorization: `Bearer ${s.token}` } : {},
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, data.error ?? 'error', data.message ?? 'Upload failed');
+  return data.photos;
+}

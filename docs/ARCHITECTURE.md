@@ -90,15 +90,24 @@ What to switch on as volume grows (no redesign needed):
 - OTP codes are stored hashed, expire in 10 minutes, and lock after 5 wrong tries.
 - Every pricing change, refund, vendor status change and settings change is written to `audit_logs`.
 
-## 7. AI
+## 7. Photos
+
+- Customers attach up to 6 photos to a requirement, vendors up to 6 to a quotation and 12 to their business profile.
+- Flow: the app uploads to `POST /uploads?kind=lead|quotation|vendor` first, gets photo ids back, then sends `photoIds` when saving the lead, quotation or profile. Only the uploader's own, not-yet-used photos can be attached.
+- Every image is decoded and re-encoded (sharp): auto-rotated, max 1600 px, JPEG. Anything that is not a real image is rejected, and re-encoding strips EXIF metadata, so the GPS location a phone embeds in a photo never reaches vendors.
+- Storage driver: `local` disk in development, any S3-compatible private bucket in production (`STORAGE_DRIVER=s3`). Keys are `kind/yyyy/mm/uuid.jpg`.
+- Access: photos are never public. The API hands out a link only after checking the viewer may see the lead or quotation (same rules as the data itself); links expire after 1 hour (HMAC-signed for local, presigned for S3).
+- Uploads never attached to anything are deleted after 24 hours by `sweepUnlinked` (to be scheduled in the worker).
+
+## 8. AI
 
 `lib/classify.ts` is the seam. Today it scores admin-managed keywords. Next step: send the text to an LLM, ask it to pick from the category list and extract the category's fields, then **validate the answer against the database** before use. Money, privacy and matching eligibility stay deterministic code.
 
-## 8. Roadmap from here
+## 9. Roadmap from here
 
 1. **Payments**: Razorpay order + signed webhook credits the wallet (`reference = pay:<payment_id>` is already idempotent). Turn off dev recharge with `PAYMENTS_DEV_MODE=false`.
 2. **OTP SMS**: MSG91/Twilio; set `OTP_DEV_MODE=false`; add rate limiting per phone and IP.
-3. **Uploads**: S3 presigned URLs for lead photos, vendor documents, quote attachments.
+3. **Uploads**: photos are done; next are vendor verification documents (PDF) and a scheduled sweeper job.
 4. **Notifications**: push (Expo/FCM) for new lead, new quote, new message, selection; low-wallet alert.
 5. **Queues**: BullMQ workers for matching, notifications, lead expiry and "no response" reassignment.
 6. **LLM assistant**: conversational requirement capture, quote comparison summary, Hindi support.

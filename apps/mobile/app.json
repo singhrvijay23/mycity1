@@ -25,6 +25,16 @@
     },
     "extra": {
       "apiUrl": "http://localhost:4000"
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MyCity needs your photos so you can attach them to requirements and quotations.",
+          "cameraPermission": "MyCity uses the camera so you can photograph the work or item you need."
+        }
+      ],
+      "expo-secure-store"
+    ]
   }
 }

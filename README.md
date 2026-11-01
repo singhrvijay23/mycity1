@@ -32,6 +32,8 @@ cd apps/mobile && npm install
 npx expo start                        # scan the QR code with Expo Go
 ```
 
+For photos to load on a phone, also set `PUBLIC_API_URL` in `apps/api/.env` to the same address the phone uses (photo links are built from it).
+
 ### Demo logins (OTP is always `123456` in development)
 
 | Role | Mobile |
@@ -63,9 +65,10 @@ They cover matching (including the nearby-city vendor), contact privacy before a
 - Masked lead view for vendors; contact revealed only to the selected vendor, enforced in the API
 - Quotation with price breakup; fee shown before submit and charged once, atomically, from a prepaid wallet; revisions free
 - Wallet with an append-only ledger, recharge (dev) and admin refunds
+- Photos on requirements, quotations and vendor profiles: camera or gallery on mobile, resized to 1600 px, location data (EXIF/GPS) stripped, private links that expire after an hour
 - In-app chat that hides phone numbers, emails and links until selection (always, in Phase 2 mode)
 - Admin: dashboard, revenue by category, vendor approval, leads, category-wise pricing, settings including the Phase 1 / Phase 2 contact switch
 
 ## Next steps
 
-See "Roadmap" in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): Razorpay webhook, SMS OTP, push notifications, photo uploads, queue workers, LLM requirement assistant, reviews.
+See "Roadmap" in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): Razorpay webhook, SMS OTP, push notifications, queue workers, LLM requirement assistant, reviews.

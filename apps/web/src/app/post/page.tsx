@@ -1,7 +1,8 @@
 'use client';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, Photo } from '@/lib/api';
+import { PhotoPicker } from '@/components/Photos';
 import { useSession } from '@/lib/useSession';
 
 type Field = { key: string; label: string; type: 'text' | 'number' | 'select'; options?: string[] };
@@ -20,6 +21,7 @@ function PostForm() {
     description: params.get('text') ?? '', address: '', budget: '', neededBy: '',
   });
   const [details, setDetails] = useState<Record<string, string>>({});
+  const [photos, setPhotos] = useState<Photo[]>([]);
   const [suggest, setSuggest] = useState<{ categoryId: number; name: string }[]>([]);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -51,7 +53,7 @@ function PostForm() {
       const r = await api('/leads', { body: {
         categoryId: f.categoryId, cityId: f.cityId, localityId: f.localityId || undefined,
         title: f.title || (sub ? `${sub.name} required` : 'Requirement'), description: f.description, details,
-        address: f.address || undefined, budgetRupees: f.budget ? Number(f.budget) : undefined, neededBy: f.neededBy || undefined,
+        address: f.address || undefined, photoIds: photos.map((p) => p.id), budgetRupees: f.budget ? Number(f.budget) : undefined, neededBy: f.neededBy || undefined,
       } });
       router.push(`/my-leads/${r.id}?notified=${r.vendorsNotified}`);
     } catch (e: any) { setErr(e.message); setBusy(false); }
@@ -75,6 +77,7 @@ function PostForm() {
             : <input type={fl.type} value={details[fl.key] ?? ''} onChange={(e) => setDetails({ ...details, [fl.key]: e.target.value })} />}
         </div>
       ))}
+      <PhotoPicker kind="lead" value={photos} onChange={setPhotos} label="Photos of the problem or item (optional)" />
       <div><label>Short title</label><input value={f.title} onChange={set('title')} placeholder={sub ? `${sub.name} required` : ''} /></div>
       <div className="row">
         <div style={{ flex: 1 }}><label>City</label><select value={f.cityId} onChange={set('cityId')}>{cities.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
