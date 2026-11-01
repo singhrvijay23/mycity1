@@ -4,6 +4,7 @@ import { pool, setting, tx } from '../lib/db.js';
 import { bad, forbidden, HttpError, notFound } from '../lib/errors.js';
 import { quoteFee } from '../lib/pricing.js';
 import { requireRole } from '../app.js';
+import { linkPhotos, photosFor } from '../lib/attachments.js';
 
 const quoteInput = z.object({
   amountRupees: z.number().nonnegative(),
@@ -12,6 +13,7 @@ const quoteInput = z.object({
   completionDays: z.number().int().positive().max(365).optional(),
   warranty: z.string().max(200).optional(),
   validUntil: z.string().date().optional(),
+  photoIds: z.array(z.string().uuid()).optional(),
 });
 const toItems = (items: { label: string; amountRupees: number }[]) =>
   JSON.stringify(items.map((i) => ({ label: i.label, amount_paise: Math.round(i.amountRupees * 100) })));
@@ -38,6 +40,7 @@ export default async function (app: FastifyInstance) {
       serviceRadiusKm: z.number().int().min(1).max(300).default(15),
       gstNumber: z.string().max(20).optional(),
       categoryIds: z.array(z.number().int()).min(1).max(30),
+      photoIds: z.array(z.string().uuid()).optional(),
     }).parse(req.body);
     const me = req.user.sub;
     return tx(async (c) => {
@@ -57,6 +60,7 @@ export default async function (app: FastifyInstance) {
         [me, b.categoryIds],
       );
       await c.query('INSERT INTO wallets (vendor_id) VALUES ($1) ON CONFLICT DO NOTHING', [me]);
+      await linkPhotos(c, 'vendor', me, me, b.photoIds, true);
       return (await c.query('SELECT user_id, business_name, status FROM vendors WHERE user_id = $1', [me])).rows[0];
     });
   });
@@ -111,6 +115,8 @@ export default async function (app: FastifyInstance) {
         [id, me],
       )).rows[0] ?? null;
     }
+    lead.photos = (await photosFor(pool, 'lead', [id])).get(id) ?? [];
+    if (myQuote) myQuote.photos = (await photosFor(pool, 'quotation', [myQuote.id])).get(myQuote.id) ?? [];
     return { lead, quoteFeePaise: fee, myQuote, customerContact };
   });
 
@@ -164,6 +170,7 @@ export default async function (app: FastifyInstance) {
          b.warranty ?? null, b.validUntil ?? null, fee],
       )).rows[0];
 
+      await linkPhotos(c, 'quotation', q.id, me, b.photoIds);
       const newBalance = balance - fee;
       if (fee > 0) {
         await c.query('UPDATE wallets SET balance_paise = $2, updated_at = now() WHERE vendor_id = $1', [me, newBalance]);
@@ -184,18 +191,21 @@ export default async function (app: FastifyInstance) {
   app.put('/quotes/:id', async (req) => {
     const id = Number((req.params as { id: string }).id);
     const b = quoteInput.parse(req.body);
-    const r = await pool.query(
-      `UPDATE quotations q SET amount_paise = $3, description = $4, items = $5, completion_days = $6, warranty = $7,
-              valid_until = $8, revision = revision + 1, updated_at = now()
-         FROM leads l
-        WHERE q.id = $1 AND q.vendor_id = $2 AND q.status = 'submitted' AND l.id = q.lead_id
-          AND l.status IN ('vendors_notified','quotes_received')
-        RETURNING q.*`,
-      [id, req.user.sub, Math.round(b.amountRupees * 100), b.description, toItems(b.items), b.completionDays ?? null,
-       b.warranty ?? null, b.validUntil ?? null],
-    );
-    if (!r.rowCount) throw bad('Quotation cannot be edited', 'invalid_state');
-    return r.rows[0];
+    return tx(async (c) => {
+      const r = await c.query(
+        `UPDATE quotations q SET amount_paise = $3, description = $4, items = $5, completion_days = $6, warranty = $7,
+                valid_until = $8, revision = revision + 1, updated_at = now()
+           FROM leads l
+          WHERE q.id = $1 AND q.vendor_id = $2 AND q.status = 'submitted' AND l.id = q.lead_id
+            AND l.status IN ('vendors_notified','quotes_received')
+          RETURNING q.*`,
+        [id, req.user.sub, Math.round(b.amountRupees * 100), b.description, toItems(b.items), b.completionDays ?? null,
+         b.warranty ?? null, b.validUntil ?? null],
+      );
+      if (!r.rowCount) throw bad('Quotation cannot be edited', 'invalid_state');
+      await linkPhotos(c, 'quotation', id, req.user.sub, b.photoIds, true);
+      return r.rows[0];
+    });
   });
 
   app.get('/wallet', async (req) => {

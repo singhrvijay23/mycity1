@@ -9,6 +9,7 @@ import customerRoutes from './routes/customer.js';
 import vendorRoutes from './routes/vendor.js';
 import chatRoutes from './routes/chat.js';
 import adminRoutes from './routes/admin.js';
+import uploadRoutes from './routes/uploads.js';
 
 export type Role = 'customer' | 'vendor' | 'admin';
 declare module '@fastify/jwt' {
@@ -34,6 +35,8 @@ export async function buildApp() {
   app.setErrorHandler((err, _req, rep) => {
     if (err instanceof HttpError) return rep.status(err.status).send({ error: err.code ?? 'error', message: err.message });
     if (err instanceof ZodError) return rep.status(400).send({ error: 'validation', message: 'Invalid input', issues: err.issues });
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status && status >= 400 && status < 500) return rep.status(status).send({ error: 'request', message: (err as Error).message });
     app.log.error(err);
     return rep.status(500).send({ error: 'internal', message: 'Something went wrong' });
   });
@@ -45,5 +48,6 @@ export async function buildApp() {
   await app.register(vendorRoutes, { prefix: '/vendor' });
   await app.register(chatRoutes);
   await app.register(adminRoutes, { prefix: '/admin' });
+  await app.register(uploadRoutes);
   return app;
 }

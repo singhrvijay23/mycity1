@@ -1,23 +1,25 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, Photo } from '@/lib/api';
+import { PhotoPicker } from '@/components/Photos';
 
 export default function Profile() {
   const [cats, setCats] = useState<any[]>([]);
   const [cities, setCities] = useState<any[]>([]);
   const [f, setF] = useState({ businessName: '', description: '', businessType: 'service', cityId: 0, serviceRadiusKm: 15, gstNumber: '' });
   const [sel, setSel] = useState<number[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>([]);
   const [status, setStatus] = useState('');
   const [err, setErr] = useState('');
   useEffect(() => {
     api('/categories').then(setCats);
     api('/cities').then((c) => { setCities(c); setF((p) => ({ ...p, cityId: p.cityId || c[0]?.id })); });
-    api('/auth/me').then((m) => { if (m.vendor) { setStatus(m.vendor.status); setSel(m.vendor.category_ids); setF({ businessName: m.vendor.business_name, description: m.vendor.description, businessType: m.vendor.business_type, cityId: m.vendor.city_id, serviceRadiusKm: m.vendor.service_radius_km, gstNumber: m.vendor.gst_number ?? '' }); } });
+    api('/auth/me').then((m) => { if (m.vendor) { setStatus(m.vendor.status); setSel(m.vendor.category_ids); setPhotos(m.vendor.photos ?? []); setF({ businessName: m.vendor.business_name, description: m.vendor.description, businessType: m.vendor.business_type, cityId: m.vendor.city_id, serviceRadiusKm: m.vendor.service_radius_km, gstNumber: m.vendor.gst_number ?? '' }); } });
   }, []);
   async function save(e: React.FormEvent) {
     e.preventDefault(); setErr('');
     try {
-      const r = await api('/vendor/profile', { method: 'PUT', body: { ...f, gstNumber: f.gstNumber || undefined, categoryIds: sel } });
+      const r = await api('/vendor/profile', { method: 'PUT', body: { ...f, gstNumber: f.gstNumber || undefined, categoryIds: sel, photoIds: photos.map((p) => p.id) } });
       setStatus(r.status);
     } catch (e: any) { setErr(e.message); }
   }
@@ -43,6 +45,7 @@ export default function Profile() {
           </div>
         ))}
       </div>
+      <PhotoPicker kind="vendor" value={photos} onChange={setPhotos} max={12} label="Shop and work photos (shown to customers with your quotes)" />
       {err && <p className="error">{err}</p>}
       <button className="btn" disabled={!sel.length}>Save profile</button>
     </form>

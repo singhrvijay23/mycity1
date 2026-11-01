@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import { api, rupees, statusLabel } from '@/lib/api';
 import { useSession } from '@/lib/useSession';
 import Chat from '@/components/Chat';
+import { Gallery, PhotoPicker } from '@/components/Photos';
 
 function LeadDetail() {
   const { id } = useParams<{ id: string }>();
@@ -11,12 +12,17 @@ function LeadDetail() {
   const [data, setData] = useState<any>(null);
   const [chatWith, setChatWith] = useState<any>(null);
   const [err, setErr] = useState('');
+  const [editPhotos, setEditPhotos] = useState<any[] | null>(null);
   const load = useCallback(() => api(`/leads/${id}`).then(setData).catch((e) => setErr(e.message)), [id]);
   useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
 
   async function select(q: any) {
     if (!confirm(`Select ${q.business_name} for ${rupees(q.amount_paise)}? Your contact will be shared with them only.`)) return;
     try { await api(`/leads/${id}/select`, { body: { quotationId: q.id } }); load(); } catch (e: any) { setErr(e.message); }
+  }
+  async function savePhotos() {
+    try { await api(`/leads/${id}/photos`, { method: 'PUT', body: { photoIds: editPhotos!.map((p) => p.id) } }); setEditPhotos(null); load(); }
+    catch (e: any) { setErr(e.message); }
   }
   async function cancel() {
     if (!confirm('Cancel this requirement?')) return;
@@ -34,6 +40,17 @@ function LeadDetail() {
           <div className="row between"><h1 style={{ margin: 0 }}>{lead.title}</h1><span className="pill">{statusLabel(lead.status)}</span></div>
           <p className="muted small">#{lead.id} · {lead.category} · {lead.locality ? `${lead.locality}, ` : ''}{lead.city}</p>
           <p>{lead.description}</p>
+          {editPhotos ? (
+            <div className="stack">
+              <PhotoPicker kind="lead" value={editPhotos} onChange={setEditPhotos} />
+              <div className="row"><button className="btn sm" onClick={savePhotos}>Save photos</button><button className="link small" onClick={() => setEditPhotos(null)}>Cancel</button></div>
+            </div>
+          ) : (
+            <>
+              <Gallery photos={lead.photos} />
+              {open && <div><button className="link small" onClick={() => setEditPhotos(lead.photos)}>{lead.photos.length ? 'Edit photos' : '+ Add photos'}</button></div>}
+            </>
+          )}
           {lead.status === 'under_review' && <p className="notice">No matching vendors yet. Our team is finding businesses for you.</p>}
           {open && <button className="link small" onClick={cancel}>Cancel requirement</button>}
         </div>
@@ -45,7 +62,9 @@ function LeadDetail() {
               <div><h3>{q.business_name}</h3><span className="small muted">{q.distance_km} km away · rating {q.rating || 'new'}{q.revision > 1 ? ` · revised ${q.revision - 1}x` : ''}</span></div>
               <div className="stat">{rupees(q.amount_paise)}</div>
             </div>
+            {q.vendor_photos?.length > 0 && <Gallery photos={q.vendor_photos.slice(0, 4)} size={48} />}
             <p>{q.description}</p>
+            <Gallery photos={q.photos} />
             {q.items?.length > 0 && <table className="table"><tbody>{q.items.map((i: any, n: number) => <tr key={n}><td>{i.label}</td><td>{rupees(i.amount_paise)}</td></tr>)}</tbody></table>}
             <p className="small muted">{[q.completion_days && `Completion: ${q.completion_days} days`, q.warranty && `Warranty: ${q.warranty}`, q.valid_until && `Valid until ${q.valid_until.slice(0, 10)}`].filter(Boolean).join(' · ')}</p>
             <div className="row">

@@ -4,6 +4,7 @@ import { pool, setting, tx } from '../lib/db.js';
 import { bad, forbidden, notFound } from '../lib/errors.js';
 import { distributeLead } from '../lib/matching.js';
 import { requireRole } from '../app.js';
+import { linkPhotos, photosFor } from '../lib/attachments.js';
 
 const leadInput = z.object({
   categoryId: z.number().int(),
@@ -17,6 +18,7 @@ const leadInput = z.object({
   neededBy: z.string().date().optional(),
   lat: z.number().optional(),
   lng: z.number().optional(),
+  photoIds: z.array(z.string().uuid()).optional(),
 });
 
 export default async function (app: FastifyInstance) {
@@ -58,6 +60,7 @@ export default async function (app: FastifyInstance) {
         [me, b.categoryId, b.cityId, b.localityId ?? null, lat, lng, b.title, b.description, b.details,
          b.address ?? null, b.budgetRupees ? Math.round(b.budgetRupees * 100) : null, b.neededBy ?? null, hours],
       )).rows[0];
+      await linkPhotos(c, 'lead', lead.id, me, b.photoIds);
       const notified = await distributeLead(c, lead.id);
       return { id: lead.id, vendorsNotified: notified };
     });
@@ -100,6 +103,10 @@ export default async function (app: FastifyInstance) {
         WHERE q.lead_id = $1 ORDER BY q.amount_paise ASC`,
       [id, mode],
     )).rows;
+    lead.photos = (await photosFor(pool, 'lead', [id])).get(id) ?? [];
+    const qp = await photosFor(pool, 'quotation', quotes.map((q) => q.id));
+    const vp = await photosFor(pool, 'vendor', [...new Set(quotes.map((q) => q.vendor_id))]);
+    for (const q of quotes) { q.photos = qp.get(q.id) ?? []; q.vendor_photos = vp.get(q.vendor_id) ?? []; }
     return { lead, quotes };
   });
 
@@ -119,6 +126,20 @@ export default async function (app: FastifyInstance) {
       await c.query(`UPDATE leads SET status = 'vendor_selected' WHERE id = $1`, [id]);
       return { selected: true, vendorId: q.vendor_id };
     });
+  });
+
+  // Add or remove photos while the lead is open. Vendors see the updated set.
+  app.put('/leads/:id/photos', customer, async (req) => {
+    const id = Number((req.params as { id: string }).id);
+    const { photoIds } = z.object({ photoIds: z.array(z.string().uuid()) }).parse(req.body);
+    await tx(async (c) => {
+      const lead = (await c.query('SELECT customer_id, status FROM leads WHERE id = $1 FOR UPDATE', [id])).rows[0];
+      if (!lead) throw notFound('Lead not found');
+      if (lead.customer_id !== req.user.sub) throw forbidden();
+      if (['cancelled', 'expired', 'completed'].includes(lead.status)) throw bad(`Lead is ${lead.status}`, 'invalid_state');
+      await linkPhotos(c, 'lead', id, req.user.sub, photoIds, true);
+    });
+    return { photos: (await photosFor(pool, 'lead', [id])).get(id) ?? [] };
   });
 
   app.post('/leads/:id/cancel', customer, async (req) => {

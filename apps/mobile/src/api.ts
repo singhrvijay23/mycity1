@@ -50,3 +50,20 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
 export const rupees = (paise?: number | null) =>
   paise == null ? '-' : '₹' + (paise / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 export const statusLabel = (s: string) => s.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+
+export type Photo = { id: string; url: string; width: number; height: number };
+
+/** Upload picked images. The server resizes them and strips location metadata. */
+export async function uploadPhotos(kind: 'lead' | 'quotation' | 'vendor', assets: { uri: string; mimeType?: string | null; fileName?: string | null }[]): Promise<Photo[]> {
+  const form = new FormData();
+  assets.forEach((a, i) => {
+    // React Native's FormData accepts { uri, name, type } for files.
+    form.append('file', { uri: a.uri, name: a.fileName ?? `photo-${i}.jpg`, type: a.mimeType ?? 'image/jpeg' } as unknown as Blob);
+  });
+  const res = await fetch(`${API}/uploads?kind=${kind}`, {
+    method: 'POST', body: form, headers: session ? { authorization: `Bearer ${session.token}` } : {},
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message ?? 'Upload failed');
+  return data.photos;
+}

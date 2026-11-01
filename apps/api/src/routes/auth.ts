@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { pool } from '../lib/db.js';
 import { bad, HttpError } from '../lib/errors.js';
 import { requireRole } from '../app.js';
+import { photosFor } from '../lib/attachments.js';
 
 const phone = z.string().regex(/^\+?\d{10,13}$/, 'Enter a valid mobile number');
 const hash = (s: string) => createHash('sha256').update(s).digest('hex');
@@ -61,6 +62,7 @@ export default async function (app: FastifyInstance) {
                 array(SELECT category_id FROM vendor_categories WHERE vendor_id = user_id) AS category_ids
            FROM vendors WHERE user_id = $1`, [u.id])).rows[0] ?? null
       : null;
+    if (vendor) vendor.photos = (await photosFor(pool, 'vendor', [u.id])).get(u.id) ?? [];
     return { user: u, vendor };
   });
 }
